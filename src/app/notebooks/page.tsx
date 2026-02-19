@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import AuthGuard from "@/components/AuthGuard";
 import CreateNotebookModal from "@/components/CreateNotebookModal";
@@ -13,6 +13,8 @@ export default function NotebooksPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   const fetchNotebooks = async () => {
@@ -48,6 +50,35 @@ export default function NotebooksPage() {
     fetchNotebooks();
   };
 
+  const handleContextMenu = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const MENU_W = 160, MENU_H = 40;
+    const x = Math.max(8, Math.min(e.clientX, window.innerWidth - MENU_W - 8));
+    const y = Math.max(8, Math.min(e.clientY, window.innerHeight - MENU_H - 8));
+    setContextMenu({ id, x, y });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setContextMenu(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [contextMenu]);
+
   return (
     <AuthGuard>
       <div className="h-full overflow-y-auto bg-gray-50">
@@ -78,6 +109,7 @@ export default function NotebooksPage() {
               {notebooks.map((nb) => (
                 <div
                   key={nb.id}
+                  onContextMenu={(e) => handleContextMenu(e, nb.id)}
                   className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200 hover:shadow-sm transition-shadow group"
                 >
                   <div
@@ -136,6 +168,25 @@ export default function NotebooksPage() {
             onClose={() => setShowCreate(false)}
             onCreated={fetchNotebooks}
           />
+        )}
+
+        {contextMenu && (
+          <div
+            ref={menuRef}
+            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                deleteNotebook(contextMenu.id);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          </div>
         )}
       </div>
     </AuthGuard>

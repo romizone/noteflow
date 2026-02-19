@@ -4,6 +4,8 @@ import { tags, noteTags } from "@/lib/schema";
 import { getCurrentUserId, unauthorized } from "@/lib/auth-helpers";
 import { eq, and, count } from "drizzle-orm";
 
+const MAX_NAME_LENGTH = 100;
+
 export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
@@ -30,9 +32,17 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
+  if (!body.name?.trim()) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  if (body.name.trim().length > MAX_NAME_LENGTH) {
+    return NextResponse.json({ error: "Name is too long" }, { status: 400 });
+  }
+
   const [tag] = await db
     .insert(tags)
-    .values({ userId, name: body.name })
+    .values({ userId, name: body.name.trim() })
     .returning();
 
   return NextResponse.json(tag, { status: 201 });
@@ -47,9 +57,14 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Tag ID required" }, { status: 400 });
   }
 
-  await db
+  const [deleted] = await db
     .delete(tags)
-    .where(and(eq(tags.id, id), eq(tags.userId, userId)));
+    .where(and(eq(tags.id, id), eq(tags.userId, userId)))
+    .returning({ id: tags.id });
+
+  if (!deleted) {
+    return NextResponse.json({ error: "Tag not found" }, { status: 404 });
+  }
 
   return NextResponse.json({ success: true });
 }

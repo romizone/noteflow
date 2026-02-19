@@ -4,6 +4,18 @@ import { notebooks, notes } from "@/lib/schema";
 import { getCurrentUserId, unauthorized } from "@/lib/auth-helpers";
 import { eq, and, count } from "drizzle-orm";
 
+const MAX_NAME_LENGTH = 200;
+
+const ALLOWED_NOTEBOOK_FIELDS = new Set(["name", "color", "isDefault"]);
+
+function pickAllowed(obj: Record<string, unknown>) {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    if (ALLOWED_NOTEBOOK_FIELDS.has(key)) result[key] = obj[key];
+  }
+  return result;
+}
+
 export async function GET() {
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
@@ -36,11 +48,19 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
+  if (!body.name?.trim()) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  if (body.name.trim().length > MAX_NAME_LENGTH) {
+    return NextResponse.json({ error: "Name is too long" }, { status: 400 });
+  }
+
   const [notebook] = await db
     .insert(notebooks)
     .values({
       userId,
-      name: body.name,
+      name: body.name.trim(),
       color: body.color || "#4CAF50",
     })
     .returning();
@@ -53,7 +73,23 @@ export async function PATCH(req: NextRequest) {
   if (!userId) return unauthorized();
 
   const body = await req.json();
-  const { id, ...updates } = body;
+  const { id, ...rawUpdates } = body;
+
+  if (!id) {
+    return NextResponse.json({ error: "Notebook ID required" }, { status: 400 });
+  }
+
+  const updates = pickAllowed(rawUpdates);
+
+  if (updates.name !== undefined) {
+    if (typeof updates.name !== "string" || !updates.name.trim()) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    }
+    if (updates.name.trim().length > MAX_NAME_LENGTH) {
+      return NextResponse.json({ error: "Name is too long" }, { status: 400 });
+    }
+    updates.name = updates.name.trim();
+  }
 
   updates.updatedAt = new Date();
 
@@ -62,6 +98,10 @@ export async function PATCH(req: NextRequest) {
     .set(updates)
     .where(and(eq(notebooks.id, id), eq(notebooks.userId, userId)))
     .returning();
+
+  if (!notebook) {
+    return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  }
 
   return NextResponse.json(notebook);
 }
@@ -78,9 +118,14 @@ export async function DELETE(req: NextRequest) {
     );
   }
 
-  await db
+  const [deleted] = await db
     .delete(notebooks)
-    .where(and(eq(notebooks.id, id), eq(notebooks.userId, userId)));
+    .where(and(eq(notebooks.id, id), eq(notebooks.userId, userId)))
+    .returning({ id: notebooks.id });
+
+  if (!deleted) {
+    return NextResponse.json({ error: "Notebook not found" }, { status: 404 });
+  }
 
   return NextResponse.json({ success: true });
 }

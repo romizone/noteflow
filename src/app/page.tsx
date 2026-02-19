@@ -91,6 +91,7 @@ function HomeContent() {
                       key={note.id}
                       note={note}
                       notebookName={getNotebookName(note.notebookId)}
+                      onDelete={(id) => setNotes((prev) => prev.filter((n) => n.id !== id))}
                     />
                   ))}
                 </div>

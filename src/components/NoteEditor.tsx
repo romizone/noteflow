@@ -270,7 +270,16 @@ export default function NoteEditor({
           onClick={() => {
             const url = window.prompt("Enter URL:");
             if (url) {
-              editor.chain().focus().setLink({ href: url }).run();
+              try {
+                const parsed = new URL(url, window.location.origin);
+                if (!["http:", "https:", "mailto:"].includes(parsed.protocol)) {
+                  alert("Only http, https, and mailto links are allowed.");
+                  return;
+                }
+                editor.chain().focus().setLink({ href: parsed.href }).run();
+              } catch {
+                alert("Invalid URL.");
+              }
             }
           }}
           active={editor.isActive("link")}

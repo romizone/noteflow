@@ -1,8 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { notes, noteTags, tags } from "@/lib/schema";
+import { notes, noteTags, tags, notebooks } from "@/lib/schema";
 import { getCurrentUserId, unauthorized } from "@/lib/auth-helpers";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
+
+const ALLOWED_NOTE_FIELDS = new Set([
+  "title",
+  "content",
+  "plainText",
+  "notebookId",
+  "isPinned",
+  "isFavorite",
+  "isTrashed",
+  "trashedAt",
+]);
+
+function pickAllowed(obj: Record<string, unknown>) {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    if (ALLOWED_NOTE_FIELDS.has(key)) result[key] = obj[key];
+  }
+  return result;
+}
+
+async function validateNotebookOwnership(notebookId: string, userId: string) {
+  const [nb] = await db
+    .select({ id: notebooks.id })
+    .from(notebooks)
+    .where(and(eq(notebooks.id, notebookId), eq(notebooks.userId, userId)));
+  return !!nb;
+}
+
+async function validateTagOwnership(tagIds: string[], userId: string) {
+  if (!tagIds.length) return true;
+  const owned = await db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.userId, userId), inArray(tags.id, tagIds)));
+  return owned.length === tagIds.length;
+}
 
 export async function GET(req: NextRequest) {
   const userId = await getCurrentUserId();
@@ -21,6 +57,9 @@ export async function GET(req: NextRequest) {
   }
 
   if (notebookId) {
+    if (!(await validateNotebookOwnership(notebookId, userId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     conditions.push(eq(notes.notebookId, notebookId));
   }
 
@@ -61,6 +100,20 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
+  // Validate notebookId ownership
+  if (body.notebookId) {
+    if (!(await validateNotebookOwnership(body.notebookId, userId))) {
+      return NextResponse.json({ error: "Invalid notebook" }, { status: 400 });
+    }
+  }
+
+  // Validate tagIds ownership
+  if (body.tagIds?.length) {
+    if (!(await validateTagOwnership(body.tagIds, userId))) {
+      return NextResponse.json({ error: "Invalid tag IDs" }, { status: 400 });
+    }
+  }
+
   const [note] = await db
     .insert(notes)
     .values({
@@ -89,13 +142,22 @@ export async function PATCH(req: NextRequest) {
   if (!userId) return unauthorized();
 
   const body = await req.json();
-  const { id, tagIds, ...updates } = body;
+  const { id, tagIds, ...rawUpdates } = body;
 
   if (!id) {
     return NextResponse.json({ error: "Note ID required" }, { status: 400 });
   }
 
+  // Allow-list: only permit known safe fields
+  const updates = pickAllowed(rawUpdates);
   updates.updatedAt = new Date();
+
+  // Validate notebookId ownership if being changed
+  if (updates.notebookId) {
+    if (!(await validateNotebookOwnership(updates.notebookId as string, userId))) {
+      return NextResponse.json({ error: "Invalid notebook" }, { status: 400 });
+    }
+  }
 
   const [note] = await db
     .update(notes)
@@ -103,7 +165,15 @@ export async function PATCH(req: NextRequest) {
     .where(and(eq(notes.id, id), eq(notes.userId, userId)))
     .returning();
 
+  if (!note) {
+    return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  }
+
   if (tagIds !== undefined) {
+    // Validate tagIds ownership
+    if (tagIds.length && !(await validateTagOwnership(tagIds, userId))) {
+      return NextResponse.json({ error: "Invalid tag IDs" }, { status: 400 });
+    }
     await db.delete(noteTags).where(eq(noteTags.noteId, id));
     if (tagIds.length) {
       await db.insert(noteTags).values(
@@ -124,9 +194,14 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Note ID required" }, { status: 400 });
   }
 
-  await db
+  const [deleted] = await db
     .delete(notes)
-    .where(and(eq(notes.id, id), eq(notes.userId, userId)));
+    .where(and(eq(notes.id, id), eq(notes.userId, userId)))
+    .returning({ id: notes.id });
+
+  if (!deleted) {
+    return NextResponse.json({ error: "Note not found" }, { status: 404 });
+  }
 
   return NextResponse.json({ success: true });
 }

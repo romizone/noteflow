@@ -4,12 +4,14 @@ import { notes } from "@/lib/schema";
 import { getCurrentUserId, unauthorized } from "@/lib/auth-helpers";
 import { eq, and, or, ilike, desc } from "drizzle-orm";
 
+const MAX_QUERY_LENGTH = 200;
+
 export async function GET(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 
   const q = req.nextUrl.searchParams.get("q");
-  if (!q) {
+  if (!q || q.length > MAX_QUERY_LENGTH) {
     return NextResponse.json([]);
   }
 
