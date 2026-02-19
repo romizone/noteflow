@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AuthGuard from "@/components/AuthGuard";
 import NoteEditor from "@/components/NoteEditor";
@@ -14,6 +14,7 @@ import {
   MoreHorizontal,
   BookOpen,
   RotateCcw,
+  Save,
 } from "lucide-react";
 
 export default function NoteEditorPage() {
@@ -29,8 +30,10 @@ export default function NoteEditorPage() {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [loading, setLoading] = useState(!isNew);
+  const latestContentRef = useRef<{ html: string; text: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/notebooks").then((r) => r.json()).then(setNotebooks);
@@ -55,6 +58,8 @@ export default function NoteEditorPage() {
   const saveNote = useCallback(
     async (html: string, text: string) => {
       setSaving(true);
+      setSaved(false);
+      latestContentRef.current = { html, text };
       try {
         if (isNew || !note) {
           const res = await fetch("/api/notes", {
@@ -85,6 +90,7 @@ export default function NoteEditorPage() {
             }),
           });
         }
+        setSaved(true);
       } catch (err) {
         console.error("Failed to save:", err);
       }
@@ -92,6 +98,13 @@ export default function NoteEditorPage() {
     },
     [isNew, note, title, selectedNotebookId, selectedTagIds]
   );
+
+  const handleManualSave = useCallback(() => {
+    const ref = latestContentRef.current;
+    if (ref) {
+      saveNote(ref.html, ref.text);
+    }
+  }, [saveNote]);
 
   const handleTitleBlur = () => {
     if (note && title !== note.title) {
@@ -212,10 +225,15 @@ export default function NoteEditorPage() {
 
           <div className="flex-1" />
 
-          {/* Save Status */}
-          <span className="text-xs text-gray-400">
-            {saving ? "Saving..." : "Saved"}
-          </span>
+          {/* Save Button */}
+          <button
+            onClick={handleManualSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {saving ? "Saving..." : saved ? "Saved" : "Save"}
+          </button>
 
           {note && !note.isTrashed && (
             <>
