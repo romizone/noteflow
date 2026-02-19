@@ -38,9 +38,9 @@ export default function NoteCard({ note, notebookName, onDelete }: NoteCardProps
   };
 
   const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     setShowMenu(false);
-    if (!confirm("Move this note to trash?")) return;
     try {
       const res = await fetch("/api/notes", {
         method: "PATCH",
