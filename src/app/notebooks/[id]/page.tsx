@@ -86,8 +86,10 @@ export default function NotebookPage() {
             </div>
           ) : notes.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
-              <p className="text-lg mb-1">No notes in this notebook</p>
-              <p className="text-sm">Create one to get started.</p>
+              <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <p className="text-lg mb-1">Notebook ini masih kosong</p>
+              <p className="text-sm mb-4">Buat note baru atau pindahkan note yang ada ke notebook ini.</p>
+              <p className="text-xs text-gray-300">Tip: Buka note, lalu pilih notebook di dropdown header.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

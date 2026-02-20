@@ -58,7 +58,7 @@ export default function ScratchPad() {
   };
 
   return (
-    <div className="bg-[#fef9e7] rounded-xl p-4 border border-[#f0e6c0]">
+    <div className="bg-[#fef9e7] rounded-xl p-4 border border-[#f0e6c0] max-w-2xl">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-gray-700">Scratch pad</h3>
         {saving && (
@@ -75,7 +75,7 @@ export default function ScratchPad() {
         value={content}
         onChange={(e) => handleChange(e.target.value)}
         placeholder="Start writing..."
-        className="w-full h-32 bg-transparent text-sm text-gray-700 resize-none focus:outline-none placeholder-gray-400"
+        className="w-full h-24 bg-transparent text-sm text-gray-700 resize-none focus:outline-none placeholder-gray-400"
       />
     </div>
   );

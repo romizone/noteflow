@@ -105,57 +105,64 @@ export default function NotebooksPage() {
               <p className="text-sm">Create a notebook to organize your notes.</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {notebooks.map((nb) => (
                 <div
                   key={nb.id}
                   onContextMenu={(e) => handleContextMenu(e, nb.id)}
-                  className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200 hover:shadow-sm transition-shadow group"
+                  className="bg-white rounded-xl border border-gray-200 hover:shadow-md transition-shadow group cursor-pointer overflow-hidden"
                 >
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: nb.color + "20" }}
-                  >
-                    <BookOpen
-                      className="w-5 h-5"
-                      style={{ color: nb.color }}
-                    />
-                  </div>
+                  {/* Color banner */}
+                  <div className="h-2" style={{ backgroundColor: nb.color }} />
 
-                  {editingId === nb.id ? (
-                    <input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onBlur={saveEdit}
-                      onKeyDown={(e) => e.key === "Enter" && saveEdit()}
-                      className="flex-1 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                      autoFocus
-                    />
-                  ) : (
-                    <button
-                      onClick={() => router.push(`/notebooks/${nb.id}`)}
-                      className="flex-1 text-left"
-                    >
-                      <h3 className="font-medium text-gray-900">{nb.name}</h3>
-                      <p className="text-xs text-gray-400">
-                        {nb.noteCount} note{nb.noteCount !== 1 ? "s" : ""}
-                      </p>
-                    </button>
-                  )}
+                  <div className="p-4">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div
+                        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: nb.color + "20" }}
+                      >
+                        <BookOpen
+                          className="w-5 h-5"
+                          style={{ color: nb.color }}
+                        />
+                      </div>
 
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => startEdit(nb)}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => deleteNotebook(nb.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-500 rounded"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                      <div className="flex items-center gap-1 ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startEdit(nb); }}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteNotebook(nb.id); }}
+                          className="p-1.5 text-gray-400 hover:text-red-500 rounded hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {editingId === nb.id ? (
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onBlur={saveEdit}
+                        onKeyDown={(e) => e.key === "Enter" && saveEdit()}
+                        className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                        autoFocus
+                      />
+                    ) : (
+                      <button
+                        onClick={() => router.push(`/notebooks/${nb.id}`)}
+                        className="w-full text-left"
+                      >
+                        <h3 className="font-semibold text-gray-900 mb-1">{nb.name}</h3>
+                        <p className="text-xs text-gray-400">
+                          {nb.noteCount} note{nb.noteCount !== 1 ? "s" : ""}
+                        </p>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

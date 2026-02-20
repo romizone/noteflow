@@ -114,7 +114,7 @@ function HomeContent() {
             </section>
 
             {!searchQuery && (
-              <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <section className="mt-2">
                 <ScratchPad />
               </section>
             )}
