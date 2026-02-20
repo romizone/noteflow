@@ -6,7 +6,7 @@ import AuthGuard from "@/components/AuthGuard";
 import NoteCard from "@/components/NoteCard";
 import ScratchPad from "@/components/ScratchPad";
 import { Note, Notebook } from "@/lib/types";
-import { Pencil, AlertCircle } from "lucide-react";
+import { Pin, Pencil, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 function HomeContent() {
@@ -53,6 +53,12 @@ function HomeContent() {
     return notebooks.find((nb) => nb.id === notebookId)?.name;
   };
 
+  // For Home (no search): only show pinned notes
+  // For Search: show all results
+  const pinnedNotes = searchQuery
+    ? notes
+    : notes.filter((n) => n.isPinned);
+
   return (
     <div className="h-full overflow-y-auto bg-gray-50">
       <div className="max-w-6xl mx-auto p-6 lg:p-8">
@@ -82,37 +88,58 @@ function HomeContent() {
           </div>
         ) : (
           <>
-            <section className="mb-8">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">
-                {searchQuery ? "Results" : "Notes"}
-              </h2>
-              {notes.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <p className="text-lg mb-2">
-                    {searchQuery ? "No results found" : "No notes yet"}
-                  </p>
-                  {!searchQuery && (
-                    <p className="text-sm">
-                      Click the green &quot;Note&quot; button to create your
-                      first note.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {notes.map((note) => (
-                    <NoteCard
-                      key={note.id}
-                      note={note}
-                      notebookName={getNotebookName(note.notebookId)}
-                      onDelete={(id) => setNotes((prev) => prev.filter((n) => n.id !== id))}
-                      onUpdate={(updated) => setNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n))}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+            {/* Search results OR Pinned notes */}
+            {searchQuery ? (
+              <section className="mb-8">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">
+                  Results
+                </h2>
+                {pinnedNotes.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <p className="text-lg mb-2">No results found</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {pinnedNotes.map((note) => (
+                      <NoteCard
+                        key={note.id}
+                        note={note}
+                        notebookName={getNotebookName(note.notebookId)}
+                        onDelete={(id) => setNotes((prev) => prev.filter((n) => n.id !== id))}
+                        onUpdate={(updated) => setNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n))}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : (
+              <>
+                {/* Pinned notes section — only show if there are pinned notes */}
+                {pinnedNotes.length > 0 && (
+                  <section className="mb-8">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Pin className="w-4 h-4 text-green-600" />
+                      <h2 className="text-lg font-semibold text-gray-800">
+                        Pinned
+                      </h2>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {pinnedNotes.map((note) => (
+                        <NoteCard
+                          key={note.id}
+                          note={note}
+                          notebookName={getNotebookName(note.notebookId)}
+                          onDelete={(id) => setNotes((prev) => prev.filter((n) => n.id !== id))}
+                          onUpdate={(updated) => setNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n))}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
 
+            {/* Scratch Pad — always visible on Home */}
             {!searchQuery && (
               <section className="mt-2">
                 <ScratchPad />
