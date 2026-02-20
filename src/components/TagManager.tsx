@@ -30,10 +30,14 @@ export default function TagManager({
 
   const handleCreateTag = async () => {
     if (!newTagName.trim()) return;
-    const tag = await onCreateTag(newTagName.trim());
-    onChange([...selectedTagIds, tag.id]);
-    setNewTagName("");
-    setShowInput(false);
+    try {
+      const tag = await onCreateTag(newTagName.trim());
+      onChange([...selectedTagIds, tag.id]);
+      setNewTagName("");
+      setShowInput(false);
+    } catch {
+      // Tag creation failed — keep input open for retry
+    }
   };
 
   return (

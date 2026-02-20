@@ -65,7 +65,10 @@ export async function POST(req: NextRequest) {
       userId,
       title: body.title.trim(),
       noteId: body.noteId || null,
-      dueDate: body.dueDate ? new Date(body.dueDate) : null,
+      dueDate: body.dueDate ? (() => {
+        const d = new Date(body.dueDate);
+        return isNaN(d.getTime()) ? null : d;
+      })() : null,
     })
     .returning();
 
@@ -95,8 +98,8 @@ export async function PATCH(req: NextRequest) {
     updates.title = updates.title.trim();
   }
 
-  // Validate noteId ownership if being changed
-  if (updates.noteId) {
+  // Validate noteId ownership if being changed (allow null to unlink)
+  if (updates.noteId !== undefined && updates.noteId !== null) {
     const [note] = await db
       .select({ id: notes.id })
       .from(notes)
@@ -107,7 +110,15 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (updates.dueDate !== undefined) {
-    updates.dueDate = updates.dueDate ? new Date(updates.dueDate as string) : null;
+    if (updates.dueDate) {
+      const parsed = new Date(updates.dueDate as string);
+      if (isNaN(parsed.getTime())) {
+        return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+      }
+      updates.dueDate = parsed;
+    } else {
+      updates.dueDate = null;
+    }
   }
 
   (updates as Record<string, unknown>).updatedAt = new Date();

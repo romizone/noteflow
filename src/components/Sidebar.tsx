@@ -47,8 +47,14 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (session) {
-      fetch("/api/notebooks").then((r) => r.json()).then(setNotebooks);
-      fetch("/api/tags").then((r) => r.json()).then(setTags);
+      fetch("/api/notebooks")
+        .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+        .then((data) => setNotebooks(Array.isArray(data) ? data : []))
+        .catch(() => setNotebooks([]));
+      fetch("/api/tags")
+        .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+        .then((data) => setTags(Array.isArray(data) ? data : []))
+        .catch(() => setTags([]));
     }
   }, [session]);
 
@@ -68,6 +74,7 @@ export default function Sidebar() {
       setLoadingNotes((prev) => new Set(prev).add(notebookId));
       try {
         const res = await fetch(`/api/notes?notebookId=${notebookId}`);
+        if (!res.ok) throw new Error();
         const data = await res.json();
         setNotebookNotes((prev) => ({ ...prev, [notebookId]: Array.isArray(data) ? data : [] }));
       } catch {
@@ -261,19 +268,23 @@ export default function Sidebar() {
                         {/* Quick add note to this notebook */}
                         <button
                           onClick={async () => {
-                            const res = await fetch("/api/notes", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ notebookId: nb.id }),
-                            });
-                            const newNote = await res.json();
-                            // Update cache
-                            setNotebookNotes((prev) => ({
-                              ...prev,
-                              [nb.id]: [newNote, ...(prev[nb.id] || [])],
-                            }));
-                            router.push(`/notes/${newNote.id}`);
-                            setMobileOpen(false);
+                            try {
+                              const res = await fetch("/api/notes", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ notebookId: nb.id }),
+                              });
+                              if (!res.ok) return;
+                              const newNote = await res.json();
+                              setNotebookNotes((prev) => ({
+                                ...prev,
+                                [nb.id]: [newNote, ...(prev[nb.id] || [])],
+                              }));
+                              router.push(`/notes/${newNote.id}`);
+                              setMobileOpen(false);
+                            } catch {
+                              // silently ignore
+                            }
                           }}
                           className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-xs text-gray-400 hover:bg-[#ece5d8] hover:text-green-600 transition-colors mt-0.5"
                         >

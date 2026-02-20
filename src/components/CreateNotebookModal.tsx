@@ -20,21 +20,31 @@ export default function CreateNotebookModal({
   const [name, setName] = useState("");
   const [color, setColor] = useState(COLORS[0]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     setLoading(true);
+    setError("");
 
-    await fetch("/api/notebooks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), color }),
-    });
-
-    setLoading(false);
-    onCreated();
-    onClose();
+    try {
+      const res = await fetch("/api/notebooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), color }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to create notebook");
+      }
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create notebook");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -80,6 +90,9 @@ export default function CreateNotebookModal({
               ))}
             </div>
           </div>
+          {error && (
+            <p className="text-sm text-red-500">{error}</p>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"

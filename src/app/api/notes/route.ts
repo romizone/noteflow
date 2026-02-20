@@ -190,7 +190,10 @@ export async function PATCH(req: NextRequest) {
 
   // Validate notebookId ownership if being changed (allow null to remove from notebook)
   if (updates.notebookId !== undefined && updates.notebookId !== null) {
-    if (!(await validateNotebookOwnership(updates.notebookId as string, userId))) {
+    if (typeof updates.notebookId !== "string") {
+      return NextResponse.json({ error: "Invalid notebook ID" }, { status: 400 });
+    }
+    if (!(await validateNotebookOwnership(updates.notebookId, userId))) {
       return NextResponse.json({ error: "Invalid notebook" }, { status: 400 });
     }
   }
