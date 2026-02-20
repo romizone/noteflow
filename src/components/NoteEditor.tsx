@@ -12,7 +12,8 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
-import { useEffect, useRef, memo, useCallback } from "react";
+import { useEffect, useRef, memo, useCallback, type MutableRefObject } from "react";
+import type { Editor } from "@tiptap/react";
 import {
   Bold,
   Italic,
@@ -34,15 +35,13 @@ import {
   Undo,
   Redo,
   Minus,
-  MousePointerClick,
-  Copy,
-  Scissors,
 } from "lucide-react";
 
 interface NoteEditorProps {
   content: string;
   onChange: (html: string, text: string) => void;
   placeholder?: string;
+  editorRef?: MutableRefObject<Editor | null>;
 }
 
 // Memoized toolbar button to prevent unnecessary re-renders
@@ -75,6 +74,7 @@ export default function NoteEditor({
   content,
   onChange,
   placeholder = "Start writing...",
+  editorRef,
 }: NoteEditorProps) {
   // Use ref for onChange to avoid re-creating the editor when onChange changes
   const onChangeRef = useRef(onChange);
@@ -108,6 +108,13 @@ export default function NoteEditor({
       },
     },
   });
+
+  // Expose editor to parent via ref
+  useEffect(() => {
+    if (editorRef && editor) {
+      editorRef.current = editor;
+    }
+  }, [editor, editorRef]);
 
   // Only sync content from parent on initial load, NOT on every change.
   // The `content` prop is the *initial* content. After mount, the editor owns its state.
@@ -303,50 +310,6 @@ export default function NoteEditor({
           title="Add Link"
         >
           <LinkIcon className="w-4 h-4" />
-        </ToolBtn>
-
-        <div className="w-px h-5 bg-gray-300 mx-1" />
-
-        <ToolBtn
-          onClick={() => editor.chain().focus().selectAll().run()}
-          title="Select All"
-        >
-          <MousePointerClick className="w-4 h-4" />
-        </ToolBtn>
-        <ToolBtn
-          onClick={() => {
-            const { from, to } = editor.state.selection;
-            if (from === to) {
-              editor.chain().focus().selectAll().run();
-            }
-            const text = editor.state.doc.textBetween(
-              editor.state.selection.from,
-              editor.state.selection.to,
-              "\n"
-            );
-            navigator.clipboard.writeText(text);
-          }}
-          title="Copy"
-        >
-          <Copy className="w-4 h-4" />
-        </ToolBtn>
-        <ToolBtn
-          onClick={() => {
-            const { from, to } = editor.state.selection;
-            if (from === to) {
-              editor.chain().focus().selectAll().run();
-            }
-            const text = editor.state.doc.textBetween(
-              editor.state.selection.from,
-              editor.state.selection.to,
-              "\n"
-            );
-            navigator.clipboard.writeText(text);
-            editor.chain().focus().deleteSelection().run();
-          }}
-          title="Cut"
-        >
-          <Scissors className="w-4 h-4" />
         </ToolBtn>
       </div>
 

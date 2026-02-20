@@ -6,6 +6,7 @@ import AuthGuard from "@/components/AuthGuard";
 import NoteEditor from "@/components/NoteEditor";
 import TagManager from "@/components/TagManager";
 import { Note, Notebook, Tag } from "@/lib/types";
+import type { Editor } from "@tiptap/react";
 import {
   ArrowLeft,
   Star,
@@ -16,6 +17,10 @@ import {
   Save,
   Check,
   Loader2,
+  MousePointerClick,
+  Copy,
+  Scissors,
+  ClipboardPaste,
 } from "lucide-react";
 
 interface NoteWithTags extends Note {
@@ -38,6 +43,7 @@ export default function NoteEditorPage() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState<string | null>(null);
+  const editorInstanceRef = useRef<Editor | null>(null);
 
   // Refs for latest values (avoid stale closures in debounce)
   const latestContentRef = useRef<{ html: string; text: string } | null>(null);
@@ -281,6 +287,51 @@ export default function NoteEditorPage() {
     return tag;
   };
 
+  // Clipboard actions
+  const handleSelectAll = useCallback(() => {
+    editorInstanceRef.current?.chain().focus().selectAll().run();
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    const ed = editorInstanceRef.current;
+    if (!ed) return;
+    const { from, to } = ed.state.selection;
+    if (from === to) ed.chain().focus().selectAll().run();
+    const text = ed.state.doc.textBetween(
+      ed.state.selection.from,
+      ed.state.selection.to,
+      "\n"
+    );
+    navigator.clipboard.writeText(text);
+  }, []);
+
+  const handleCut = useCallback(() => {
+    const ed = editorInstanceRef.current;
+    if (!ed) return;
+    const { from, to } = ed.state.selection;
+    if (from === to) ed.chain().focus().selectAll().run();
+    const text = ed.state.doc.textBetween(
+      ed.state.selection.from,
+      ed.state.selection.to,
+      "\n"
+    );
+    navigator.clipboard.writeText(text);
+    ed.chain().focus().deleteSelection().run();
+  }, []);
+
+  const handlePaste = useCallback(async () => {
+    const ed = editorInstanceRef.current;
+    if (!ed) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        ed.chain().focus().insertContent(text).run();
+      }
+    } catch {
+      // Clipboard permission denied — ignore
+    }
+  }, []);
+
   if (loading) {
     return (
       <AuthGuard>
@@ -318,6 +369,40 @@ export default function NoteEditorPage() {
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
+
+          <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+          {/* Clipboard Actions */}
+          <button
+            onClick={handleSelectAll}
+            title="Select All"
+            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+          >
+            <MousePointerClick className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleCopy}
+            title="Copy"
+            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleCut}
+            title="Cut"
+            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+          >
+            <Scissors className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handlePaste}
+            title="Paste"
+            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+          >
+            <ClipboardPaste className="w-4 h-4" />
+          </button>
+
+          <div className="w-px h-5 bg-gray-200 mx-0.5" />
 
           {/* Notebook Selector */}
           <div className="flex items-center gap-1.5 text-sm">
@@ -441,7 +526,7 @@ export default function NoteEditorPage() {
 
         {/* Editor */}
         <div className="flex-1 overflow-hidden">
-          <NoteEditor content={initialContent} onChange={handleEditorChange} />
+          <NoteEditor content={initialContent} onChange={handleEditorChange} editorRef={editorInstanceRef} />
         </div>
       </div>
     </AuthGuard>
