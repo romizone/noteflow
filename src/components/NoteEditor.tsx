@@ -12,7 +12,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useEffect, useRef, memo, useCallback } from "react";
 import {
   Bold,
   Italic,
@@ -42,12 +42,40 @@ interface NoteEditorProps {
   placeholder?: string;
 }
 
+// Memoized toolbar button to prevent unnecessary re-renders
+const ToolBtn = memo(function ToolBtn({
+  onClick,
+  active,
+  children,
+  title,
+}: {
+  onClick: () => void;
+  active?: boolean;
+  children: React.ReactNode;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
+        active ? "bg-gray-200 text-green-700" : "text-gray-600"
+      }`}
+    >
+      {children}
+    </button>
+  );
+});
+
 export default function NoteEditor({
   content,
   onChange,
   placeholder = "Start writing...",
 }: NoteEditorProps) {
-  const debounceRef = useRef<NodeJS.Timeout>(undefined);
+  // Use ref for onChange to avoid re-creating the editor when onChange changes
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const editor = useEditor({
     extensions: [
@@ -67,10 +95,8 @@ export default function NoteEditor({
     ],
     content,
     onUpdate: ({ editor }) => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        onChange(editor.getHTML(), editor.getText());
-      }, 500);
+      // Call onChange directly — debouncing is handled by the parent
+      onChangeRef.current(editor.getHTML(), editor.getText());
     },
     editorProps: {
       attributes: {
@@ -80,36 +106,38 @@ export default function NoteEditor({
     },
   });
 
+  // Only sync content from parent on initial load, NOT on every change.
+  // The `content` prop is the *initial* content. After mount, the editor owns its state.
+  // This prevents cursor jumping and the infinite save loop.
+  const initializedRef = useRef(false);
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content);
+    if (editor && content && !initializedRef.current) {
+      // Only set if the editor was created with empty content but we now have real content
+      if (editor.isEmpty && content) {
+        editor.commands.setContent(content);
+      }
+      initializedRef.current = true;
     }
-  }, [content]);
+  }, [content, editor]);
+
+  const handleAddLink = useCallback(() => {
+    if (!editor) return;
+    const url = window.prompt("Enter URL:");
+    if (url) {
+      try {
+        const parsed = new URL(url, window.location.origin);
+        if (!["http:", "https:", "mailto:"].includes(parsed.protocol)) {
+          alert("Only http, https, and mailto links are allowed.");
+          return;
+        }
+        editor.chain().focus().setLink({ href: parsed.href }).run();
+      } catch {
+        alert("Invalid URL.");
+      }
+    }
+  }, [editor]);
 
   if (!editor) return null;
-
-  const ToolBtn = ({
-    onClick,
-    active,
-    children,
-    title,
-  }: {
-    onClick: () => void;
-    active?: boolean;
-    children: React.ReactNode;
-    title?: string;
-  }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-        active ? "bg-gray-200 text-green-700" : "text-gray-600"
-      }`}
-    >
-      {children}
-    </button>
-  );
 
   return (
     <div className="flex flex-col h-full">
@@ -267,21 +295,7 @@ export default function NoteEditor({
           <Minus className="w-4 h-4" />
         </ToolBtn>
         <ToolBtn
-          onClick={() => {
-            const url = window.prompt("Enter URL:");
-            if (url) {
-              try {
-                const parsed = new URL(url, window.location.origin);
-                if (!["http:", "https:", "mailto:"].includes(parsed.protocol)) {
-                  alert("Only http, https, and mailto links are allowed.");
-                  return;
-                }
-                editor.chain().focus().setLink({ href: parsed.href }).run();
-              } catch {
-                alert("Invalid URL.");
-              }
-            }
-          }}
+          onClick={handleAddLink}
           active={editor.isActive("link")}
           title="Add Link"
         >

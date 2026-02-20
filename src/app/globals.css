@@ -10,9 +10,42 @@ body {
   color: var(--foreground);
 }
 
+/* Smooth page transitions */
+main {
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Note cards hover effect */
+.note-card-enter {
+  animation: cardIn 0.2s ease-out;
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Tiptap Editor Styles */
 .tiptap {
   outline: none;
+  caret-color: #00a82d;
 }
 
 .tiptap p.is-editor-empty:first-child::before {
@@ -88,6 +121,11 @@ body {
   cursor: pointer;
 }
 
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > div > p {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+
 .tiptap blockquote {
   border-left: 3px solid #d1d5db;
   padding-left: 1rem;
@@ -131,6 +169,10 @@ body {
   cursor: pointer;
 }
 
+.tiptap a:hover {
+  color: #1d4ed8;
+}
+
 .tiptap hr {
   border: none;
   border-top: 1px solid #e5e7eb;
@@ -141,6 +183,21 @@ body {
   max-width: 100%;
   height: auto;
   border-radius: 0.5rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.tiptap img.ProseMirror-selectednode {
+  box-shadow: 0 0 0 2px #00a82d;
+}
+
+/* Focus styles for better editing experience */
+.tiptap:focus-visible {
+  outline: none;
+}
+
+/* Smooth selection highlighting */
+.tiptap ::selection {
+  background-color: rgba(0, 168, 45, 0.15);
 }
 
 /* Scrollbar */
@@ -159,4 +216,20 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* Toast/notification animation */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.2s ease-out;
 }

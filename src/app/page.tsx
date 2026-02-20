@@ -6,13 +6,14 @@ import AuthGuard from "@/components/AuthGuard";
 import NoteCard from "@/components/NoteCard";
 import ScratchPad from "@/components/ScratchPad";
 import { Note, Notebook } from "@/lib/types";
-import { Pencil } from "lucide-react";
+import { Pencil, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 function HomeContent() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("search");
   const router = useRouter();
@@ -20,6 +21,7 @@ function HomeContent() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      setError(null);
       try {
         const [notesRes, notebooksRes] = await Promise.all([
           searchQuery
@@ -27,14 +29,19 @@ function HomeContent() {
             : fetch("/api/notes"),
           fetch("/api/notebooks"),
         ]);
+
+        if (!notesRes.ok) throw new Error("Failed to load notes");
+        if (!notebooksRes.ok) throw new Error("Failed to load notebooks");
+
         const [notesData, notebooksData] = await Promise.all([
           notesRes.json(),
           notebooksRes.json(),
         ]);
-        setNotes(notesData);
-        setNotebooks(notebooksData);
+
+        setNotes(Array.isArray(notesData) ? notesData : []);
+        setNotebooks(Array.isArray(notebooksData) ? notebooksData : []);
       } catch (err) {
-        console.error("Failed to fetch data:", err);
+        setError(err instanceof Error ? err.message : "Something went wrong");
       }
       setLoading(false);
     };
@@ -61,6 +68,13 @@ function HomeContent() {
             <Pencil className="w-4 h-4 text-gray-600" />
           </button>
         </div>
+
+        {error && (
+          <div className="flex items-center gap-2 p-4 mb-6 bg-red-50 text-red-700 rounded-xl border border-red-200 animate-slide-up">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span className="text-sm">{error}</span>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -92,6 +106,7 @@ function HomeContent() {
                       note={note}
                       notebookName={getNotebookName(note.notebookId)}
                       onDelete={(id) => setNotes((prev) => prev.filter((n) => n.id !== id))}
+                      onUpdate={(updated) => setNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n))}
                     />
                   ))}
                 </div>

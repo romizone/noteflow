@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { tags, noteTags } from "@/lib/schema";
 import { getCurrentUserId, unauthorized } from "@/lib/auth-helpers";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and, count, ilike } from "drizzle-orm";
 
 const MAX_NAME_LENGTH = 100;
 
@@ -40,9 +40,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Name is too long" }, { status: 400 });
   }
 
+  const trimmedName = body.name.trim();
+
+  // Check for duplicate tag name (case-insensitive)
+  const [existing] = await db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.userId, userId), ilike(tags.name, trimmedName)));
+
+  if (existing) {
+    return NextResponse.json({ error: "Tag already exists" }, { status: 409 });
+  }
+
   const [tag] = await db
     .insert(tags)
-    .values({ userId, name: body.name.trim() })
+    .values({ userId, name: trimmedName })
     .returning();
 
   return NextResponse.json(tag, { status: 201 });

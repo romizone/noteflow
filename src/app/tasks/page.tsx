@@ -9,19 +9,28 @@ import {
   Square,
   Trash2,
   Calendar,
+  AlertCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
 
   const fetchTasks = async () => {
     setLoading(true);
-    const res = await fetch("/api/tasks");
-    setTasks(await res.json());
+    setError(null);
+    try {
+      const res = await fetch("/api/tasks");
+      if (!res.ok) throw new Error("Failed to load tasks");
+      const data = await res.json();
+      setTasks(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    }
     setLoading(false);
   };
 
@@ -31,31 +40,53 @@ export default function TasksPage() {
 
   const createTask = async () => {
     if (!newTaskTitle.trim()) return;
-    await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: newTaskTitle.trim(),
-        dueDate: newTaskDueDate || null,
-      }),
-    });
-    setNewTaskTitle("");
-    setNewTaskDueDate("");
-    fetchTasks();
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newTaskTitle.trim(),
+          dueDate: newTaskDueDate || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to create task");
+      setNewTaskTitle("");
+      setNewTaskDueDate("");
+      fetchTasks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create task");
+    }
   };
 
   const toggleTask = async (task: Task) => {
-    await fetch("/api/tasks", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: task.id, isCompleted: !task.isCompleted }),
-    });
-    fetchTasks();
+    // Optimistic update
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === task.id ? { ...t, isCompleted: !t.isCompleted } : t
+      )
+    );
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: task.id, isCompleted: !task.isCompleted }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      // Revert on failure
+      fetchTasks();
+    }
   };
 
   const deleteTask = async (id: string) => {
-    await fetch(`/api/tasks?id=${id}`, { method: "DELETE" });
-    fetchTasks();
+    // Optimistic update
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    try {
+      const res = await fetch(`/api/tasks?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+    } catch {
+      fetchTasks();
+    }
   };
 
   const pendingTasks = tasks.filter((t) => !t.isCompleted);
@@ -67,6 +98,13 @@ export default function TasksPage() {
         <div className="max-w-3xl mx-auto p-6 lg:p-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-8">Tasks</h1>
 
+          {error && (
+            <div className="flex items-center gap-2 p-4 mb-6 bg-red-50 text-red-700 rounded-xl border border-red-200 animate-slide-up">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
           {/* Create Task */}
           <div className="flex items-center gap-2 mb-6">
             <input
@@ -75,18 +113,18 @@ export default function TasksPage() {
               onChange={(e) => setNewTaskTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createTask()}
               placeholder="Add a task..."
-              className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-shadow"
             />
             <input
               type="date"
               value={newTaskDueDate}
               onChange={(e) => setNewTaskDueDate(e.target.value)}
-              className="px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-shadow"
             />
             <button
               onClick={createTask}
               disabled={!newTaskTitle.trim()}
-              className="px-4 py-2.5 bg-[#00a82d] text-white rounded-lg hover:bg-[#009425] text-sm font-medium disabled:opacity-50"
+              className="px-4 py-2.5 bg-[#00a82d] text-white rounded-lg hover:bg-[#009425] text-sm font-medium disabled:opacity-50 transition-colors"
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -114,11 +152,11 @@ export default function TasksPage() {
                     {pendingTasks.map((task) => (
                       <div
                         key={task.id}
-                        className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200 group hover:shadow-sm"
+                        className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200 group hover:shadow-sm transition-shadow"
                       >
                         <button
                           onClick={() => toggleTask(task)}
-                          className="text-gray-300 hover:text-green-500"
+                          className="text-gray-300 hover:text-green-500 transition-colors"
                         >
                           <Square className="w-5 h-5" />
                         </button>
@@ -133,7 +171,7 @@ export default function TasksPage() {
                         )}
                         <button
                           onClick={() => deleteTask(task.id)}
-                          className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -153,11 +191,11 @@ export default function TasksPage() {
                     {completedTasks.map((task) => (
                       <div
                         key={task.id}
-                        className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200 group hover:shadow-sm opacity-60"
+                        className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200 group hover:shadow-sm opacity-60 transition-all"
                       >
                         <button
                           onClick={() => toggleTask(task)}
-                          className="text-green-500"
+                          className="text-green-500 transition-colors"
                         >
                           <CheckSquare className="w-5 h-5" />
                         </button>
@@ -166,7 +204,7 @@ export default function TasksPage() {
                         </span>
                         <button
                           onClick={() => deleteTask(task.id)}
-                          className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

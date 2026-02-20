@@ -11,131 +11,227 @@ import {
   Star,
   Pin,
   Trash2,
-  MoreHorizontal,
   BookOpen,
   RotateCcw,
   Save,
+  Check,
+  Loader2,
 } from "lucide-react";
+
+interface NoteWithTags extends Note {
+  tagIds?: string[];
+}
 
 export default function NoteEditorPage() {
   const params = useParams();
   const router = useRouter();
   const isNew = params.id === "new";
 
-  const [note, setNote] = useState<Note | null>(null);
+  const [note, setNote] = useState<NoteWithTags | null>(null);
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [initialContent, setInitialContent] = useState("");
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
   const [loading, setLoading] = useState(!isNew);
-  const latestContentRef = useRef<{ html: string; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
+  // Refs for latest values (avoid stale closures in debounce)
+  const latestContentRef = useRef<{ html: string; text: string } | null>(null);
+  const noteRef = useRef<NoteWithTags | null>(null);
+  const titleRef = useRef(title);
+  const notebookRef = useRef(selectedNotebookId);
+  const tagIdsRef = useRef(selectedTagIds);
+  const debounceRef = useRef<NodeJS.Timeout>(undefined);
+  const isNewRef = useRef(isNew);
+  const savingRef = useRef(false);
+
+  // Keep refs in sync
+  useEffect(() => { noteRef.current = note; }, [note]);
+  useEffect(() => { titleRef.current = title; }, [title]);
+  useEffect(() => { notebookRef.current = selectedNotebookId; }, [selectedNotebookId]);
+  useEffect(() => { tagIdsRef.current = selectedTagIds; }, [selectedTagIds]);
+  useEffect(() => { isNewRef.current = isNew; }, [isNew]);
+
+  // Cleanup debounce on unmount
   useEffect(() => {
-    fetch("/api/notebooks").then((r) => r.json()).then(setNotebooks);
-    fetch("/api/tags").then((r) => r.json()).then(setAllTags);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  // Load data
+  useEffect(() => {
+    fetch("/api/notebooks")
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load notebooks");
+        return r.json();
+      })
+      .then(setNotebooks)
+      .catch(() => {});
+
+    fetch("/api/tags")
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load tags");
+        return r.json();
+      })
+      .then(setAllTags)
+      .catch(() => {});
 
     if (!isNew) {
-      fetch(`/api/notes`)
-        .then((r) => r.json())
-        .then((notes: Note[]) => {
-          const found = notes.find((n) => n.id === params.id);
-          if (found) {
-            setNote(found);
-            setTitle(found.title);
-            setContent(found.content);
-            setSelectedNotebookId(found.notebookId || "");
-          }
+      fetch(`/api/notes/${params.id}`)
+        .then((r) => {
+          if (!r.ok) throw new Error("Note not found");
+          return r.json();
+        })
+        .then((data: NoteWithTags) => {
+          setNote(data);
+          setTitle(data.title);
+          setInitialContent(data.content);
+          setSelectedNotebookId(data.notebookId || "");
+          setSelectedTagIds(data.tagIds || []);
+          latestContentRef.current = { html: data.content, text: data.plainText };
+          setLoading(false);
+        })
+        .catch((err) => {
+          setError(err.message);
           setLoading(false);
         });
     }
   }, [params.id, isNew]);
 
-  const saveNote = useCallback(
-    async (html: string, text: string) => {
-      setSaving(true);
-      setSaved(false);
-      latestContentRef.current = { html, text };
-      try {
-        if (isNew || !note) {
-          const res = await fetch("/api/notes", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: title || "Untitled",
-              content: html,
-              plainText: text,
-              notebookId: selectedNotebookId || null,
-              tagIds: selectedTagIds,
-            }),
-          });
-          const newNote = await res.json();
-          setNote(newNote);
-          window.history.replaceState(null, "", `/notes/${newNote.id}`);
-        } else {
-          await fetch("/api/notes", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              id: note.id,
-              title: title || "Untitled",
-              content: html,
-              plainText: text,
-              notebookId: selectedNotebookId || null,
-              tagIds: selectedTagIds,
-            }),
-          });
-        }
-        setSaved(true);
-      } catch (err) {
-        console.error("Failed to save:", err);
+  // Core save function using refs to avoid stale closures
+  const performSave = useCallback(async () => {
+    if (savingRef.current) return;
+    const ref = latestContentRef.current;
+    if (!ref) return;
+
+    savingRef.current = true;
+    setSaving(true);
+    setSaved(false);
+    setError(null);
+
+    try {
+      if (isNewRef.current || !noteRef.current) {
+        const res = await fetch("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: titleRef.current || "Untitled",
+            content: ref.html,
+            plainText: ref.text,
+            notebookId: notebookRef.current || null,
+            tagIds: tagIdsRef.current,
+          }),
+        });
+        if (!res.ok) throw new Error("Failed to create note");
+        const newNote = await res.json();
+        setNote(newNote);
+        isNewRef.current = false;
+        window.history.replaceState(null, "", `/notes/${newNote.id}`);
+      } else {
+        const res = await fetch("/api/notes", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: noteRef.current.id,
+            title: titleRef.current || "Untitled",
+            content: ref.html,
+            plainText: ref.text,
+            notebookId: notebookRef.current || null,
+            tagIds: tagIdsRef.current,
+          }),
+        });
+        if (!res.ok) throw new Error("Failed to save note");
       }
+      setSaved(true);
+      // Reset saved indicator after 2s
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      savingRef.current = false;
       setSaving(false);
+    }
+  }, []);
+
+  // Keyboard shortcut: Ctrl+S / Cmd+S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        performSave();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [performSave]);
+
+  // Debounced auto-save triggered by editor content changes
+  const handleEditorChange = useCallback(
+    (html: string, text: string) => {
+      latestContentRef.current = { html, text };
+      setSaved(false);
+
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        performSave();
+      }, 1500);
     },
-    [isNew, note, title, selectedNotebookId, selectedTagIds]
+    [performSave]
   );
 
+  // Manual save
   const handleManualSave = useCallback(() => {
-    const ref = latestContentRef.current;
-    if (ref) {
-      saveNote(ref.html, ref.text);
-    }
-  }, [saveNote]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    performSave();
+  }, [performSave]);
 
+  // Title blur → save title
   const handleTitleBlur = () => {
-    if (note && title !== note.title) {
+    if (noteRef.current && title !== noteRef.current.title) {
       fetch("/api/notes", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: note.id, title: title || "Untitled" }),
-      });
+        body: JSON.stringify({ id: noteRef.current.id, title: title || "Untitled" }),
+      }).catch(() => {});
     }
   };
 
   const toggleFavorite = async () => {
     if (!note) return;
-    const res = await fetch("/api/notes", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: note.id, isFavorite: !note.isFavorite }),
-    });
-    const updated = await res.json();
-    setNote(updated);
+    try {
+      const res = await fetch("/api/notes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: note.id, isFavorite: !note.isFavorite }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setNote((prev) => prev ? { ...prev, ...updated } : prev);
+    } catch {
+      setError("Failed to update");
+    }
   };
 
   const togglePin = async () => {
     if (!note) return;
-    const res = await fetch("/api/notes", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: note.id, isPinned: !note.isPinned }),
-    });
-    const updated = await res.json();
-    setNote(updated);
+    try {
+      const res = await fetch("/api/notes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: note.id, isPinned: !note.isPinned }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setNote((prev) => prev ? { ...prev, ...updated } : prev);
+    } catch {
+      setError("Failed to update");
+    }
   };
 
   const moveToTrash = async () => {
@@ -164,12 +260,12 @@ export default function NoteEditorPage() {
 
   const handleNotebookChange = async (notebookId: string) => {
     setSelectedNotebookId(notebookId);
-    if (note) {
+    if (noteRef.current) {
       await fetch("/api/notes", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: note.id, notebookId: notebookId || null }),
-      });
+        body: JSON.stringify({ id: noteRef.current.id, notebookId: notebookId || null }),
+      }).catch(() => {});
     }
   };
 
@@ -179,6 +275,7 @@ export default function NoteEditorPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
+    if (!res.ok) throw new Error("Failed to create tag");
     const tag = await res.json();
     setAllTags((prev) => [...prev, { ...tag, noteCount: 0 }]);
     return tag;
@@ -189,6 +286,22 @@ export default function NoteEditorPage() {
       <AuthGuard>
         <div className="h-full flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AuthGuard>
+    );
+  }
+
+  if (error && !note && !isNew) {
+    return (
+      <AuthGuard>
+        <div className="h-full flex flex-col items-center justify-center gap-4">
+          <p className="text-gray-500">{error}</p>
+          <button
+            onClick={() => router.push("/")}
+            className="px-4 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600"
+          >
+            Go Home
+          </button>
         </div>
       </AuthGuard>
     );
@@ -225,13 +338,28 @@ export default function NoteEditorPage() {
 
           <div className="flex-1" />
 
+          {/* Save status */}
+          {error && (
+            <span className="text-xs text-red-500 mr-2">{error}</span>
+          )}
+
           {/* Save Button */}
           <button
             onClick={handleManualSave}
             disabled={saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              saved
+                ? "bg-green-100 text-green-700"
+                : "bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            }`}
           >
-            <Save className="w-3.5 h-3.5" />
+            {saving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : saved ? (
+              <Check className="w-3.5 h-3.5" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
             {saving ? "Saving..." : saved ? "Saved" : "Save"}
           </button>
 
@@ -239,7 +367,7 @@ export default function NoteEditorPage() {
             <>
               <button
                 onClick={togglePin}
-                className={`p-1.5 rounded-lg hover:bg-gray-100 ${
+                className={`p-1.5 rounded-lg hover:bg-gray-100 transition-colors ${
                   note.isPinned ? "text-green-600" : "text-gray-400"
                 }`}
                 title={note.isPinned ? "Unpin" : "Pin"}
@@ -248,10 +376,8 @@ export default function NoteEditorPage() {
               </button>
               <button
                 onClick={toggleFavorite}
-                className={`p-1.5 rounded-lg hover:bg-gray-100 ${
-                  note.isFavorite
-                    ? "text-yellow-500"
-                    : "text-gray-400"
+                className={`p-1.5 rounded-lg hover:bg-gray-100 transition-colors ${
+                  note.isFavorite ? "text-yellow-500" : "text-gray-400"
                 }`}
                 title={note.isFavorite ? "Remove from favorites" : "Favorite"}
               >
@@ -263,7 +389,7 @@ export default function NoteEditorPage() {
               </button>
               <button
                 onClick={moveToTrash}
-                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
                 title="Move to trash"
               >
                 <Trash2 className="w-4 h-4" />
@@ -301,12 +427,12 @@ export default function NoteEditorPage() {
             selectedTagIds={selectedTagIds}
             onChange={(ids) => {
               setSelectedTagIds(ids);
-              if (note) {
+              if (noteRef.current) {
                 fetch("/api/notes", {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: note.id, tagIds: ids }),
-                });
+                  body: JSON.stringify({ id: noteRef.current.id, tagIds: ids }),
+                }).catch(() => {});
               }
             }}
             onCreateTag={handleCreateTag}
@@ -315,7 +441,7 @@ export default function NoteEditorPage() {
 
         {/* Editor */}
         <div className="flex-1 overflow-hidden">
-          <NoteEditor content={content} onChange={saveNote} />
+          <NoteEditor content={initialContent} onChange={handleEditorChange} />
         </div>
       </div>
     </AuthGuard>

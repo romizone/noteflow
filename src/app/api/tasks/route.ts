@@ -106,8 +106,8 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  if (updates.dueDate) {
-    updates.dueDate = new Date(updates.dueDate as string);
+  if (updates.dueDate !== undefined) {
+    updates.dueDate = updates.dueDate ? new Date(updates.dueDate as string) : null;
   }
 
   (updates as Record<string, unknown>).updatedAt = new Date();

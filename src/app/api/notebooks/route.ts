@@ -5,6 +5,7 @@ import { getCurrentUserId, unauthorized } from "@/lib/auth-helpers";
 import { eq, and, count } from "drizzle-orm";
 
 const MAX_NAME_LENGTH = 200;
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 const ALLOWED_NOTEBOOK_FIELDS = new Set(["name", "color", "isDefault"]);
 
@@ -56,12 +57,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Name is too long" }, { status: 400 });
   }
 
+  const color = body.color && HEX_COLOR_RE.test(body.color) ? body.color : "#4CAF50";
+
   const [notebook] = await db
     .insert(notebooks)
     .values({
       userId,
       name: body.name.trim(),
-      color: body.color || "#4CAF50",
+      color,
     })
     .returning();
 
@@ -89,6 +92,12 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Name is too long" }, { status: 400 });
     }
     updates.name = updates.name.trim();
+  }
+
+  if (updates.color !== undefined) {
+    if (typeof updates.color !== "string" || !HEX_COLOR_RE.test(updates.color)) {
+      return NextResponse.json({ error: "Invalid color format" }, { status: 400 });
+    }
   }
 
   updates.updatedAt = new Date();

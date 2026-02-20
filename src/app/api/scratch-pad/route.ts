@@ -16,11 +16,20 @@ export async function GET() {
   return NextResponse.json(pad || { content: "" });
 }
 
+const MAX_SCRATCH_PAD_LENGTH = 50_000;
+
 export async function PUT(req: NextRequest) {
   const userId = await getCurrentUserId();
   if (!userId) return unauthorized();
 
   const body = await req.json();
+
+  if (body.content !== undefined && typeof body.content !== "string") {
+    return NextResponse.json({ error: "Content must be a string" }, { status: 400 });
+  }
+  if (body.content && body.content.length > MAX_SCRATCH_PAD_LENGTH) {
+    return NextResponse.json({ error: "Content is too long" }, { status: 400 });
+  }
 
   const [existing] = await db
     .select()
