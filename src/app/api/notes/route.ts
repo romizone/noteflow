@@ -4,6 +4,9 @@ import { notes, noteTags, tags, notebooks } from "@/lib/schema";
 import { getCurrentUserId, unauthorized } from "@/lib/auth-helpers";
 import { eq, and, desc, inArray } from "drizzle-orm";
 
+const MAX_TITLE_LENGTH = 500;
+const MAX_CONTENT_LENGTH = 500_000; // ~500KB
+
 const ALLOWED_NOTE_FIELDS = new Set([
   "title",
   "content",
@@ -100,6 +103,20 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
+  // Input validation
+  if (body.title && typeof body.title !== "string") {
+    return NextResponse.json({ error: "Title must be a string" }, { status: 400 });
+  }
+  if (body.title && body.title.length > MAX_TITLE_LENGTH) {
+    return NextResponse.json({ error: "Title is too long" }, { status: 400 });
+  }
+  if (body.content && typeof body.content !== "string") {
+    return NextResponse.json({ error: "Content must be a string" }, { status: 400 });
+  }
+  if (body.content && body.content.length > MAX_CONTENT_LENGTH) {
+    return NextResponse.json({ error: "Content is too long" }, { status: 400 });
+  }
+
   // Validate notebookId ownership
   if (body.notebookId) {
     if (!(await validateNotebookOwnership(body.notebookId, userId))) {
@@ -150,6 +167,25 @@ export async function PATCH(req: NextRequest) {
 
   // Allow-list: only permit known safe fields
   const updates = pickAllowed(rawUpdates);
+
+  // Validate field types
+  if (updates.title !== undefined && typeof updates.title !== "string") {
+    return NextResponse.json({ error: "Title must be a string" }, { status: 400 });
+  }
+  if (updates.title && (updates.title as string).length > MAX_TITLE_LENGTH) {
+    return NextResponse.json({ error: "Title is too long" }, { status: 400 });
+  }
+  if (updates.content !== undefined && typeof updates.content !== "string") {
+    return NextResponse.json({ error: "Content must be a string" }, { status: 400 });
+  }
+  if (updates.content && (updates.content as string).length > MAX_CONTENT_LENGTH) {
+    return NextResponse.json({ error: "Content is too long" }, { status: 400 });
+  }
+
+  // Convert date strings to Date objects for Drizzle
+  if (updates.trashedAt && typeof updates.trashedAt === "string") {
+    updates.trashedAt = new Date(updates.trashedAt);
+  }
   updates.updatedAt = new Date();
 
   // Validate notebookId ownership if being changed
