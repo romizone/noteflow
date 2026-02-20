@@ -182,6 +182,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Content is too long" }, { status: 400 });
   }
 
+  // Convert date strings to Date objects for Drizzle
+  if (updates.trashedAt && typeof updates.trashedAt === "string") {
+    updates.trashedAt = new Date(updates.trashedAt);
+  }
   updates.updatedAt = new Date();
 
   // Validate notebookId ownership if being changed (allow null to remove from notebook)
