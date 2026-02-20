@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -15,11 +15,12 @@ import {
   ChevronDown,
   ChevronRight,
   LogOut,
-  Star,
   Menu,
   X,
+  Pin,
+  Star,
 } from "lucide-react";
-import { Notebook, Tag as TagType } from "@/lib/types";
+import { Notebook, Tag as TagType, Note } from "@/lib/types";
 
 const NAV_ITEMS = [
   { label: "Home", icon: Home, href: "/" },
@@ -38,12 +39,48 @@ export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Track which notebooks are expanded to show their notes
+  const [expandedNotebooks, setExpandedNotebooks] = useState<Set<string>>(new Set());
+  // Cache of notes per notebook
+  const [notebookNotes, setNotebookNotes] = useState<Record<string, Note[]>>({});
+  const [loadingNotes, setLoadingNotes] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     if (session) {
       fetch("/api/notebooks").then((r) => r.json()).then(setNotebooks);
       fetch("/api/tags").then((r) => r.json()).then(setTags);
     }
   }, [session]);
+
+  const toggleNotebookExpand = useCallback(async (notebookId: string) => {
+    setExpandedNotebooks((prev) => {
+      const next = new Set(prev);
+      if (next.has(notebookId)) {
+        next.delete(notebookId);
+      } else {
+        next.add(notebookId);
+      }
+      return next;
+    });
+
+    // Fetch notes for this notebook if not already cached
+    if (!notebookNotes[notebookId] && !loadingNotes.has(notebookId)) {
+      setLoadingNotes((prev) => new Set(prev).add(notebookId));
+      try {
+        const res = await fetch(`/api/notes?notebookId=${notebookId}`);
+        const data = await res.json();
+        setNotebookNotes((prev) => ({ ...prev, [notebookId]: Array.isArray(data) ? data : [] }));
+      } catch {
+        setNotebookNotes((prev) => ({ ...prev, [notebookId]: [] }));
+      } finally {
+        setLoadingNotes((prev) => {
+          const next = new Set(prev);
+          next.delete(notebookId);
+          return next;
+        });
+      }
+    }
+  }, [notebookNotes, loadingNotes]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +96,9 @@ export default function Sidebar() {
   };
 
   const isActive = (href: string) => pathname === href;
+
+  const truncateTitle = (title: string, maxLen = 22) =>
+    title.length > maxLen ? title.slice(0, maxLen) + "…" : title;
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#f5f0e8] border-r border-[#e0d9cd]">
@@ -133,30 +173,118 @@ export default function Sidebar() {
           </button>
 
           {notebooksOpen && (
-            <div className="ml-2">
-              {notebooks.map((nb) => (
-                <button
-                  key={nb.id}
-                  onClick={() => {
-                    router.push(`/notebooks/${nb.id}`);
-                    setMobileOpen(false);
-                  }}
-                  className={`flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    pathname === `/notebooks/${nb.id}`
-                      ? "bg-[#e8e1d3] text-gray-900 font-medium"
-                      : "text-gray-600 hover:bg-[#ece5d8]"
-                  }`}
-                >
-                  <BookOpen
-                    className="w-3.5 h-3.5"
-                    style={{ color: nb.color }}
-                  />
-                  <span className="truncate">{nb.name}</span>
-                  <span className="ml-auto text-xs text-gray-400">
-                    {nb.noteCount}
-                  </span>
-                </button>
-              ))}
+            <div className="ml-1">
+              {notebooks.map((nb) => {
+                const isExpanded = expandedNotebooks.has(nb.id);
+                const nbNotes = notebookNotes[nb.id] || [];
+                const isLoading = loadingNotes.has(nb.id);
+
+                return (
+                  <div key={nb.id}>
+                    {/* Notebook row */}
+                    <div className="flex items-center">
+                      {/* Expand/collapse toggle */}
+                      <button
+                        onClick={() => toggleNotebookExpand(nb.id)}
+                        className="p-0.5 text-gray-400 hover:text-gray-600 flex-shrink-0"
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="w-3 h-3" />
+                        ) : (
+                          <ChevronRight className="w-3 h-3" />
+                        )}
+                      </button>
+
+                      {/* Notebook name — navigates to notebook page */}
+                      <button
+                        onClick={() => {
+                          router.push(`/notebooks/${nb.id}`);
+                          setMobileOpen(false);
+                        }}
+                        className={`flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                          pathname === `/notebooks/${nb.id}`
+                            ? "bg-[#e8e1d3] text-gray-900 font-medium"
+                            : "text-gray-600 hover:bg-[#ece5d8]"
+                        }`}
+                      >
+                        <BookOpen
+                          className="w-3.5 h-3.5 flex-shrink-0"
+                          style={{ color: nb.color }}
+                        />
+                        <span className="truncate">{nb.name}</span>
+                        <span className="ml-auto text-xs text-gray-400 flex-shrink-0">
+                          {nb.noteCount}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Expanded notes list */}
+                    {isExpanded && (
+                      <div className="ml-4 pl-2 border-l border-[#ddd6c6]">
+                        {isLoading ? (
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-400">
+                            <div className="w-3 h-3 border border-gray-300 border-t-transparent rounded-full animate-spin" />
+                            Loading...
+                          </div>
+                        ) : nbNotes.length === 0 ? (
+                          <div className="px-2 py-1.5 text-xs text-gray-400 italic">
+                            No notes
+                          </div>
+                        ) : (
+                          nbNotes.map((note) => (
+                            <button
+                              key={note.id}
+                              onClick={() => {
+                                router.push(`/notes/${note.id}`);
+                                setMobileOpen(false);
+                              }}
+                              className={`flex items-center gap-1.5 w-full px-2 py-1 rounded text-xs transition-colors ${
+                                pathname === `/notes/${note.id}`
+                                  ? "bg-[#e8e1d3] text-gray-900 font-medium"
+                                  : "text-gray-500 hover:bg-[#ece5d8] hover:text-gray-700"
+                              }`}
+                            >
+                              <FileText className="w-3 h-3 flex-shrink-0 text-gray-400" />
+                              <span className="truncate">
+                                {truncateTitle(note.title || "Untitled")}
+                              </span>
+                              {note.isPinned && (
+                                <Pin className="w-2.5 h-2.5 text-green-500 flex-shrink-0 ml-auto" />
+                              )}
+                              {note.isFavorite && (
+                                <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                              )}
+                            </button>
+                          ))
+                        )}
+
+                        {/* Quick add note to this notebook */}
+                        <button
+                          onClick={async () => {
+                            const res = await fetch("/api/notes", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ notebookId: nb.id }),
+                            });
+                            const newNote = await res.json();
+                            // Update cache
+                            setNotebookNotes((prev) => ({
+                              ...prev,
+                              [nb.id]: [newNote, ...(prev[nb.id] || [])],
+                            }));
+                            router.push(`/notes/${newNote.id}`);
+                            setMobileOpen(false);
+                          }}
+                          className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-xs text-gray-400 hover:bg-[#ece5d8] hover:text-green-600 transition-colors mt-0.5"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add note
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
