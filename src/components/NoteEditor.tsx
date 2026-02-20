@@ -34,6 +34,9 @@ import {
   Undo,
   Redo,
   Minus,
+  MousePointerClick,
+  Copy,
+  Scissors,
 } from "lucide-react";
 
 interface NoteEditorProps {
@@ -300,6 +303,50 @@ export default function NoteEditor({
           title="Add Link"
         >
           <LinkIcon className="w-4 h-4" />
+        </ToolBtn>
+
+        <div className="w-px h-5 bg-gray-300 mx-1" />
+
+        <ToolBtn
+          onClick={() => editor.chain().focus().selectAll().run()}
+          title="Select All"
+        >
+          <MousePointerClick className="w-4 h-4" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => {
+            const { from, to } = editor.state.selection;
+            if (from === to) {
+              editor.chain().focus().selectAll().run();
+            }
+            const text = editor.state.doc.textBetween(
+              editor.state.selection.from,
+              editor.state.selection.to,
+              "\n"
+            );
+            navigator.clipboard.writeText(text);
+          }}
+          title="Copy"
+        >
+          <Copy className="w-4 h-4" />
+        </ToolBtn>
+        <ToolBtn
+          onClick={() => {
+            const { from, to } = editor.state.selection;
+            if (from === to) {
+              editor.chain().focus().selectAll().run();
+            }
+            const text = editor.state.doc.textBetween(
+              editor.state.selection.from,
+              editor.state.selection.to,
+              "\n"
+            );
+            navigator.clipboard.writeText(text);
+            editor.chain().focus().deleteSelection().run();
+          }}
+          title="Cut"
+        >
+          <Scissors className="w-4 h-4" />
         </ToolBtn>
       </div>
 
